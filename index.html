@@ -1,0 +1,647 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>لوحة التحكم الإدارية |  MCL Store</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="admin-dashboard.css">
+</head>
+<body>
+  <div class="app-layout">
+    <!-- الشريط الجانبي -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">
+          <i class="fa-solid fa-gem"></i>
+          <span> الإدارة</span>
+        </div>
+        <button class="mobile-close-btn" id="closeSidebarBtn">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#overview" class="nav-item active" data-tab="overview">
+          <i class="fa-solid fa-chart-pie"></i>
+          <span>لوحة التحكم (Dashboard)</span>
+        </a>
+        <a href="#orders" class="nav-item" data-tab="orders">
+          <i class="fa-solid fa-bag-shopping"></i>
+          <span>الطلبات (Orders)</span>
+          <span class="badge" id="pendingOrdersBadge">0</span>
+        </a>
+        <a href="#products" class="nav-item" data-tab="products">
+          <i class="fa-solid fa-boxes-stacked"></i>
+          <span>المنتجات (Products)</span>
+        </a>
+        <a href="#add-product" class="nav-item highlight-nav" data-tab="add-product" id="navAddProduct">
+          <i class="fa-solid fa-circle-plus"></i>
+          <span>إضافة منتج (Add Product)</span>
+        </a>
+        <a href="#inventory" class="nav-item" data-tab="inventory">
+          <i class="fa-solid fa-warehouse"></i>
+          <span>المخزون (Inventory)</span>
+        </a>
+        <a href="#discounts" class="nav-item" data-tab="discounts">
+          <i class="fa-solid fa-ticket"></i>
+          <span>الكوبونات والخصومات</span>
+        </a>
+        <a href="#customers" class="nav-item" data-tab="customers">
+          <i class="fa-solid fa-users"></i>
+          <span>العملاء (Customers)</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="connection-status connected">
+          <span class="status-dot"></span>
+          <span>متصل بـ Supabase (Live)</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- المحتوى الرئيسي -->
+    <div class="main-wrapper">
+      <header class="topbar">
+        <div class="topbar-left">
+          <button class="menu-toggle" id="menuToggleBtn">
+            <i class="fa-solid fa-bars"></i>
+          </button>
+          <div class="page-title-box">
+            <h1 id="currentPageTitle">لوحة التحكم</h1>
+            <span class="sub-text">إدارة المبيعات، المنتجات، والكوبونات في الوقت الفعلي</span>
+          </div>
+        </div>
+
+        <div class="topbar-right">
+          <button class="btn-secondary" id="refreshBtn">
+            <i class="fa-solid fa-rotate-right"></i>
+            <span>تحديث</span>
+          </button>
+          <div class="admin-chip">
+            <div class="avatar"><i class="fa-solid fa-user-shield"></i></div>
+            <div class="admin-info">
+              <span class="name">مدير النظام</span>
+              <span class="role">Mahmoud Elkomaty</span>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      <main class="content-body">
+        
+        <!-- تبويب نظرة عامة -->
+        <section id="tab-overview" class="tab-panel active">
+          <div class="kpi-grid">
+            <div class="kpi-card">
+              <div class="kpi-icon sales-icon"><i class="fa-solid fa-wallet"></i></div>
+              <div class="kpi-details">
+                <span class="kpi-label">إجمالي المبيعات المؤهلة</span>
+                <h3 class="kpi-value" id="kpiTotalSales">0 ج.م</h3>
+                <span class="kpi-note">لا تشمل الطلبات الملغاة أو المرتجعة</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon profit-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
+              <div class="kpi-details">
+                <span class="kpi-label">صافي الأرباح المحققة</span>
+                <h3 class="kpi-value" id="kpiNetProfit">0 ج.م</h3>
+                <span class="kpi-note">المبيعات ناقص تكاليف المنتجات</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon orders-icon"><i class="fa-solid fa-truck-fast"></i></div>
+              <div class="kpi-details">
+                <span class="kpi-label">إجمالي الطلبات</span>
+                <h3 class="kpi-value" id="kpiTotalOrders">0</h3>
+                <span class="kpi-note" id="kpiCompletedOrders">0 طلب مكتمل ومؤكد</span>
+              </div>
+            </div>
+
+            <div class="kpi-card">
+              <div class="kpi-icon stock-icon"><i class="fa-solid fa-triangle-exclamation"></i></div>
+              <div class="kpi-details">
+                <span class="kpi-label">تنبيهات المخزون</span>
+                <h3 class="kpi-value" id="kpiLowStock">0</h3>
+                <span class="kpi-note">متغيرات أوشكت على النفاد (<= 5)</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="dashboard-grid">
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-chart-area"></i> حركة المبيعات</h3>
+              </div>
+              <div class="card-body">
+                <canvas id="salesChart" height="260"></canvas>
+              </div>
+            </div>
+
+            <div class="card chart-card">
+              <div class="card-header">
+                <h3><i class="fa-solid fa-chart-pie"></i> توزيع حالات الطلبات</h3>
+              </div>
+              <div class="card-body">
+                <canvas id="ordersStatusChart" height="260"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="card table-card">
+            <div class="card-header flex-between">
+              <h3><i class="fa-solid fa-clock-rotate-left"></i> أحدث الطلبات المسجلة</h3>
+              <button class="link-btn" data-tab-switch="orders">عرض جميع الطلبات</button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>رقم الطلب</th>
+                    <th>العميل</th>
+                    <th>الهاتف</th>
+                    <th>الإجمالي</th>
+                    <th>الربح</th>
+                    <th>حالة الطلب</th>
+                    <th>الدفع</th>
+                    <th>إجراء</th>
+                  </tr>
+                </thead>
+                <tbody id="latestOrdersTbody">
+                  <tr><td colspan="8" class="loading-cell">جاري تحميل أحدث الطلبات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- تبويب الطلبات (Orders Page) -->
+        <section id="tab-orders" class="tab-panel">
+          <div class="card table-card">
+            <div class="card-header flex-between flex-wrap">
+              <div>
+                <h3><i class="fa-solid fa-cart-flatbed"></i> إدارة الطلبات والشحن</h3>
+                <p class="muted-text">عرض تفاصيل العناوين والمنتجات وحساب الأرباح مباشرة</p>
+              </div>
+              <div class="filter-actions">
+                <select id="orderStatusFilter" class="form-select">
+                  <option value="all">كل الحالات</option>
+                  <option value="pending">قيد الانتظار (Pending)</option>
+                  <option value="confirmed">مؤكد (Confirmed)</option>
+                  <option value="processing">جاري التجهيز (Processing)</option>
+                  <option value="shipped">تم الشحن (Shipped)</option>
+                  <option value="delivered">تم التوصيل (Delivered)</option>
+                  <option value="cancelled">ملغي (Cancelled)</option>
+                  <option value="returned">مرتجع (Returned)</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>رقم الطلب</th>
+                    <th>العميل والهاتف</th>
+                    <th>العناصر</th>
+                    <th>المجموع</th>
+                    <th>الخصم</th>
+                    <th>الشحن</th>
+                    <th>الإجمالي</th>
+                    <th>التكلفة</th>
+                    <th>الربح</th>
+                    <th>الدفع</th>
+                    <th>الحالة</th>
+                    <th>التاريخ</th>
+                    <th>تفاصيل</th>
+                  </tr>
+                </thead>
+                <tbody id="allOrdersTbody">
+                  <tr><td colspan="13" class="loading-cell">جاري جلب الطلبات من Supabase...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- تبويب المنتجات (Products List) -->
+        <section id="tab-products" class="tab-panel">
+          <div class="card table-card">
+            <div class="card-header flex-between flex-wrap">
+              <div>
+                <h3><i class="fa-solid fa-shirt"></i> المنتجات والمتغيرات</h3>
+                <p class="muted-text">المخزون الفعلي يعتمد على الألوان والمقاسات (product_variants)</p>
+              </div>
+              <div class="header-tools flex-gap">
+                <input type="text" id="productSearchInput" class="form-input" placeholder="بحث بالاسم أو SKU...">
+                <button class="btn-primary" data-tab-switch="add-product">
+                  <i class="fa-solid fa-plus"></i> إضافة منتج جديد
+                </button>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>الصورة</th>
+                    <th>اسم المنتج</th>
+                    <th>سعر البيع</th>
+                    <th>سعر التكلفة</th>
+                    <th>المتغيرات المتاحة</th>
+                    <th>المخزون الإجمالي</th>
+                    <th>حالة المنتج</th>
+                    <th>إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="productsTbody">
+                  <tr><td colspan="8" class="loading-cell">جاري تحميل المنتجات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- تبويب إضافة / تعديل منتج (Add / Edit Product) -->
+        <section id="tab-add-product" class="tab-panel">
+          <div class="card form-card">
+            <div class="card-header flex-between">
+              <h3 id="formModeTitle"><i class="fa-solid fa-circle-plus"></i> إضافة منتج جديد</h3>
+              <button class="btn-secondary" id="resetProductFormBtn">
+                <i class="fa-solid fa-rotate-left"></i> تفريغ النموذج
+              </button>
+            </div>
+            <div class="card-body">
+              <form id="productForm" onsubmit="handleProductFormSubmit(event)">
+                <input type="hidden" id="editProductId" value="">
+
+                <div class="form-section">
+                  <h4 class="section-title"><i class="fa-solid fa-info-circle"></i> المعلومات الأساسية</h4>
+                  <div class="form-grid-2">
+                    <div class="form-group">
+                      <label>اسم المنتج <span class="req">*</span></label>
+                      <input type="text" id="p_name" class="form-input" placeholder="مثال: تيشيرت أوفر سايز أسود" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label>الرابط التعريفي (Slug) <span class="req">*</span></label>
+                      <input type="text" id="p_slug" class="form-input" placeholder="مثال: oversized-black-tshirt" required>
+                    </div>
+                  </div>
+
+                  <div class="form-group mt-3">
+                    <label>وصف المنتج</label>
+                    <textarea id="p_description" class="form-textarea" rows="3" placeholder="اكتب تفاصيل الخامة، القصة، وإرشادات العناية..."></textarea>
+                  </div>
+                </div>
+
+                <div class="form-section">
+                  <h4 class="section-title"><i class="fa-solid fa-tags"></i> الأسعار والأكواد الافتراضية</h4>
+                  <div class="form-grid-4">
+                    <div class="form-group">
+                      <label>سعر البيع الافتراضي (ج.م) <span class="req">*</span></label>
+                      <input type="number" step="0.01" id="p_selling_price" class="form-input" placeholder="450" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label>سعر التكلفة / المصنع (ج.م) <span class="req">*</span></label>
+                      <input type="number" step="0.01" id="p_cost_price" class="form-input" placeholder="220" required>
+                    </div>
+
+                    <div class="form-group">
+                      <label>السعر قبل الخصم (اختياري)</label>
+                      <input type="number" step="0.01" id="p_compare_price" class="form-input" placeholder="550">
+                    </div>
+
+                    <div class="form-group">
+                      <label>كود المنتج الأساسي (SKU Base) <span class="req">*</span></label>
+                      <input type="text" id="p_sku" class="form-input" placeholder="TSHIRT-OVR" required>
+                    </div>
+                  </div>
+
+                  <div class="form-checkboxes mt-3">
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="p_is_active" checked>
+                      <span>المنتج نشط ومتاح في المتجر</span>
+                    </label>
+                    <label class="checkbox-label">
+                      <input type="checkbox" id="p_is_featured">
+                      <span>تمييز المنتج كـ (Featured) في الصفحة الرئيسية</span>
+                    </label>
+                  </div>
+                </div>
+
+                <div class="form-section">
+                  <h4 class="section-title"><i class="fa-solid fa-images"></i> صور المنتج (Supabase Storage: product-images)</h4>
+                  <div class="upload-dropzone" id="imageDropzone">
+                    <i class="fa-solid fa-cloud-arrow-up drop-icon"></i>
+                    <p>اضغط لاختيار الصور أو اسحبها هنا (يمكنك رفع عدة صور دفعة واحدة)</p>
+                    <input type="file" id="imageFileInput" multiple accept="image/*" class="file-hidden">
+                  </div>
+                  <div class="images-preview-grid" id="imagesPreviewContainer"></div>
+                </div>
+
+                <div class="form-section">
+                  <h4 class="section-title"><i class="fa-solid fa-palette"></i> الألوان والمقاسات</h4>
+                  <div class="variant-builder-box">
+                    <div class="builder-col">
+                      <label class="builder-heading">ألوان المنتج:</label>
+                      <div class="color-inputs-bar">
+                        <input type="text" id="colorNameInput" class="form-input" placeholder="اسم اللون (مثل: أسود)">
+                        <input type="color" id="colorHexInput" class="form-color-picker" value="#000000">
+                        <button type="button" class="btn-secondary" id="addColorBtn"><i class="fa-solid fa-plus"></i> إضافة لون</button>
+                      </div>
+                      <div class="tags-container" id="colorsListContainer"></div>
+                    </div>
+
+                    <div class="builder-col">
+                      <label class="builder-heading">المقاسات المتاحة:</label>
+                      <div class="size-quick-presets">
+                        <button type="button" class="preset-btn" onclick="addPresetSizes(['XS', 'S', 'M', 'L', 'XL', 'XXL'])">+ مقاسات ملابس قياسية</button>
+                      </div>
+                      <div class="size-inputs-bar">
+                        <input type="text" id="sizeNameInput" class="form-input" placeholder="المقاس (مثل: XL أو 42)">
+                        <button type="button" class="btn-secondary" id="addSizeBtn"><i class="fa-solid fa-plus"></i> إضافة مقاس</button>
+                      </div>
+                      <div class="tags-container" id="sizesListContainer"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="form-section" id="matrixSection">
+                  <div class="flex-between">
+                    <div>
+                      <h4 class="section-title"><i class="fa-solid fa-table-cells"></i> مصفوفة المتغيرات والمخزون (Variant Matrix)</h4>
+                      <p class="muted-text">تم توليد كل المتغيرات تلقائياً. يمكنك تخصيص السعر، التكلفة، والـ SKU لكل مقاس ولون:</p>
+                    </div>
+                    <button type="button" class="btn-secondary" id="generateMatrixBtn">
+                      <i class="fa-solid fa-arrows-rotate"></i> إعادة بناء المصفوفة
+                    </button>
+                  </div>
+
+                  <div class="table-responsive mt-3">
+                    <table class="data-table matrix-table">
+                      <thead>
+                        <tr>
+                          <th>اللون</th>
+                          <th>المقاس</th>
+                          <th>كود الـ SKU الفرعي</th>
+                          <th>سعر البيع (ج.م)</th>
+                          <th>سعر التكلفة (ج.م)</th>
+                          <th>كمية المخزون</th>
+                          <th>حالة المتغير</th>
+                        </tr>
+                      </thead>
+                      <tbody id="matrixTableBody">
+                        <tr>
+                          <td colspan="7" class="empty-cell">أضف لوناً واحداً ومقاساً واحداً على الأقل لإنشاء المصفوفة.</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div class="form-footer flex-between mt-4">
+                  <button type="submit" class="btn-primary-lg" id="submitProductBtn">
+                    <i class="fa-solid fa-floppy-disk"></i> <span id="submitBtnText">حفظ ونشر المنتج</span>
+                  </button>
+                  <span id="formStatusMsg" class="form-status"></span>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+
+        <!-- تبويب المخزون (Inventory Management) -->
+        <section id="tab-inventory" class="tab-panel">
+          <div class="card table-card">
+            <div class="card-header flex-between flex-wrap">
+              <div>
+                <h3><i class="fa-solid fa-warehouse"></i> جرد ومتابعة المخزون الفعلي</h3>
+                <p class="muted-text">تحديث مباشر لمخزون المتغيرات (product_variants)</p>
+              </div>
+              <div class="filter-actions flex-gap">
+                <select id="inventoryStockFilter" class="form-select">
+                  <option value="all">كل المتغيرات</option>
+                  <option value="low">أوشك على النفاد (<= 5)</option>
+                  <option value="out">نفد من المخزون (0)</option>
+                  <option value="in">متوفر (> 5)</option>
+                </select>
+              </div>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>المنتج</th>
+                    <th>اللون</th>
+                    <th>المقاس</th>
+                    <th>SKU</th>
+                    <th>سعر البيع</th>
+                    <th>سعر التكلفة</th>
+                    <th>الكمية الحالية</th>
+                    <th>حالة التوفر</th>
+                    <th>تعديل سريع</th>
+                  </tr>
+                </thead>
+                <tbody id="inventoryTbody">
+                  <tr><td colspan="9" class="loading-cell">جاري تحميل بيانات المخزون...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- تبويب الكوبونات والخصومات (Discounts Management) -->
+        <section id="tab-discounts" class="tab-panel">
+          <div class="card table-card">
+            <div class="card-header flex-between flex-wrap">
+              <div>
+                <h3><i class="fa-solid fa-percent"></i> كوبونات الخصم والعروض الترويجية</h3>
+                <p class="muted-text">إنشاء وإدارة أكواد الخصم وربطها بكل المنتجات أو منتج محدد</p>
+              </div>
+              <button class="btn-primary" onclick="openDiscountModal()">
+                <i class="fa-solid fa-plus-circle"></i> إضافة خصم جديد
+              </button>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>كود الكوبون</th>
+                    <th>الاسم / الوصف</th>
+                    <th>نوع وقيمة الخصم</th>
+                    <th>نطاق التطبيق (المنتجات)</th>
+                    <th>الحد الأدنى للطلب</th>
+                    <th>مرات الاستخدام</th>
+                    <th>تاريخ الانتهاء</th>
+                    <th>الحالة</th>
+                    <th>إجراءات</th>
+                  </tr>
+                </thead>
+                <tbody id="discountsTbody">
+                  <tr><td colspan="9" class="loading-cell">جاري تحميل الكوبونات...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- تبويب العملاء -->
+        <section id="tab-customers" class="tab-panel">
+          <div class="card table-card">
+            <div class="card-header">
+              <h3><i class="fa-solid fa-address-book"></i> قائمة العملاء</h3>
+            </div>
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>الاسم</th>
+                    <th>الهاتف</th>
+                    <th>الدور (Role)</th>
+                    <th>تاريخ التسجيل</th>
+                  </tr>
+                </thead>
+                <tbody id="customersTbody">
+                  <tr><td colspan="4" class="loading-cell">جاري تحميل العملاء...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+      </main>
+    </div>
+  </div>
+
+  <!-- النافذة المنبثقة لإضافة / تعديل كوبون خصم -->
+  <div class="modal-overlay" id="discountModal">
+    <div class="modal-content modal-md">
+      <div class="modal-header flex-between">
+        <h3 id="discountModalTitle"><i class="fa-solid fa-ticket"></i> إنشاء كوبون خصم جديد</h3>
+        <button class="modal-close-btn" onclick="closeDiscountModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body">
+        <form id="discountForm" onsubmit="handleDiscountFormSubmit(event)">
+          <input type="hidden" id="d_edit_id" value="">
+
+          <div class="form-grid-2">
+            <div class="form-group">
+              <label>كود الكوبون (Coupon Code) <span class="req">*</span></label>
+              <input type="text" id="d_code" class="form-input" placeholder="مثال: SUMMER25" style="text-transform:uppercase; font-weight:700;" required>
+            </div>
+
+            <div class="form-group">
+              <label>اسم الخصم / المناسبة</label>
+              <input type="text" id="d_name" class="form-input" placeholder="مثال: خصم الصيف 25%">
+            </div>
+          </div>
+
+          <div class="form-grid-2 mt-3">
+            <div class="form-group">
+              <label>نوع الخصم <span class="req">*</span></label>
+              <select id="d_type" class="form-select" required>
+                <option value="percentage">نسبة مئوية (%)</option>
+                <option value="fixed">مبلغ ثابت (ج.م)</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label>قيمة الخصم <span class="req">*</span></label>
+              <input type="number" step="0.01" id="d_value" class="form-input" placeholder="مثال: 20 أو 100" required>
+            </div>
+          </div>
+
+          <!-- تحديد نطاق المنتجات -->
+          <div class="form-section mt-3" style="padding:14px; background:rgba(0,0,0,0.25);">
+            <label class="builder-heading"><i class="fa-solid fa-crosshairs"></i> نطاق تطبيق الخصم على المنتجات:</label>
+            <div class="form-grid-2 mb-2">
+              <label class="checkbox-label">
+                <input type="radio" name="targetScope" id="scopeAll" value="all" checked onchange="toggleProductSelection(false)">
+                <span>تطبيق على جميع المنتجات في المتجر</span>
+              </label>
+              <label class="checkbox-label">
+                <input type="radio" name="targetScope" id="scopeSpecific" value="specific" onchange="toggleProductSelection(true)">
+                <span>تطبيق على منتج محدد أو منتجات معينة</span>
+              </label>
+            </div>
+
+            <div id="productSelectWrapper" style="display:none; margin-top:10px;">
+              <label style="font-size:0.8rem; color:var(--text-muted); display:block; margin-bottom:4px;">اختر المنتج المشمول بالخصم:</label>
+              <select id="d_specific_product" class="form-select">
+                <option value="">اختر المنتج من القائمة...</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-grid-3 mt-3">
+            <div class="form-group">
+              <label>الحد الأدنى للطلب (ج.م)</label>
+              <input type="number" step="0.01" id="d_min_amount" class="form-input" placeholder="مثال: 500">
+            </div>
+
+            <div class="form-group">
+              <label>الحد الأقصى للخصم (ج.م)</label>
+              <input type="number" step="0.01" id="d_max_discount" class="form-input" placeholder="مثال: 200">
+            </div>
+
+            <div class="form-group">
+              <label>مرات الاستخدام المسموحة</label>
+              <input type="number" id="d_usage_limit" class="form-input" placeholder="غير محدد (اتركه فارغاً)">
+            </div>
+          </div>
+
+          <div class="form-grid-2 mt-3">
+            <div class="form-group">
+              <label>تاريخ بدء الكوبون</label>
+              <input type="date" id="d_start_date" class="form-input">
+            </div>
+
+            <div class="form-group">
+              <label>تاريخ انتهاء الكوبون</label>
+              <input type="date" id="d_expire_date" class="form-input">
+            </div>
+          </div>
+
+          <div class="form-checkboxes mt-3">
+            <label class="checkbox-label">
+              <input type="checkbox" id="d_is_active" checked>
+              <span>الكوبون نشط وساري المفعول حالياً</span>
+            </label>
+          </div>
+
+          <div class="modal-footer flex-between mt-4">
+            <button type="submit" class="btn-primary" id="saveDiscountBtn">
+              <i class="fa-solid fa-check"></i> حفظ ونشر الكوبون
+            </button>
+            <button type="button" class="btn-secondary" onclick="closeDiscountModal()">إلغاء</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- النافذة المنبثقة لتفاصيل الطلب -->
+  <div class="modal-overlay" id="orderDetailsModal">
+    <div class="modal-content modal-lg">
+      <div class="modal-header flex-between">
+        <h3 id="modalOrderNumber">تفاصيل الطلب</h3>
+        <button class="modal-close-btn" onclick="closeOrderModal()"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <div class="modal-body" id="modalOrderBody">
+        <div class="loading-cell">جاري جلب تفاصيل الطلب...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- مكتبات التشغيل -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="admin-dashboard.js"></script>
+</body>
+</html>

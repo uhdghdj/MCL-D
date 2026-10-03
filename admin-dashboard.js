@@ -1,3 +1,4 @@
+
 // ==================================================
 // إعداد الاتصال المباشر بـ Supabase
 // ==================================================
@@ -735,25 +736,40 @@ window.handleProductFormSubmit = async function(e) {
       }
     }
 
+    // جلب أو إنشاء الألوان والمقاسات (يدعم الجداول المرتبطة بالمنتج أو العامة)
+    async function getOrCreate(table, row) {
+      // 1) البحث داخل نفس المنتج
+      let { data: found, error: findErr } = await supabaseClient.from(table).select("id")
+        .eq("product_id", productId).eq("name", row.name).limit(1);
+      if (!findErr && found && found.length) return found[0].id;
+
+      // 2) محاولة الإضافة مربوطة بالمنتج
+      let ins = await supabaseClient.from(table)
+        .insert({ product_id: productId, ...row }).select("id").single();
+      if (!ins.error && ins.data) return ins.data.id;
+
+      // 3) لو الجدول عام (بدون product_id) أو الاسم مكرر: نبحث بالاسم فقط
+      const byName = await supabaseClient.from(table).select("id").eq("name", row.name).limit(1);
+      if (!byName.error && byName.data && byName.data.length) return byName.data[0].id;
+
+      // 4) إضافة بدون product_id
+      const ins2 = await supabaseClient.from(table).insert({ ...row }).select("id").single();
+      if (!ins2.error && ins2.data) return ins2.data.id;
+
+      const msg = (ins.error && ins.error.message) || (ins2.error && ins2.error.message) || "سبب غير معروف";
+      throw new Error(`فشل حفظ "${row.name}" في ${table}: ${msg}`);
+    }
+
     const colorIdMap = {};
     for (let col of currentProductColors) {
-      const { data: colData } = await supabaseClient
-        .from("product_colors")
-        .insert({ product_id: productId, name: col.name, hex_code: col.hex_code })
-        .select()
-        .single();
-      if (colData) colorIdMap[col.name] = colData.id;
+      colorIdMap[col.name] = await getOrCreate("product_colors", { name: col.name, hex_code: col.hex_code });
     }
 
     const sizeIdMap = {};
     for (let siz of currentProductSizes) {
-      const { data: sizData } = await supabaseClient
-        .from("product_sizes")
-        .insert({ product_id: productId, name: siz.name })
-        .select()
-        .single();
-      if (sizData) sizeIdMap[siz.name] = sizData.id;
+      sizeIdMap[siz.name] = await getOrCreate("product_sizes", { name: siz.name });
     }
+    console.log("[حفظ المنتج] معرفات المقاسات:", sizeIdMap, "معرفات الألوان:", colorIdMap);
 
     const matrixRows = document.querySelectorAll(".matrix-row");
     const variantsToInsert = [];
@@ -771,6 +787,10 @@ window.handleProductFormSubmit = async function(e) {
       const vStock = parseInt(row.querySelector(".m-stock").value) || 0;
       const vActive = row.querySelector(".m-active").checked;
 
+      if (sizName && !sizeIdMap[sizName]) {
+        throw new Error(`المقاس "${sizName}" لم يُحفظ بشكل صحيح، لم يتم حفظ المتغيرات.`);
+      }
+
       totalStockFromVariants += vStock;
 
       variantsToInsert.push({
@@ -786,7 +806,26 @@ window.handleProductFormSubmit = async function(e) {
     });
 
     if (variantsToInsert.length > 0) {
-      await supabaseClient.from("product_variants").insert(variantsToInsert);
+      const failed = [];
+      for (const v of variantsToInsert) {
+        let q = supabaseClient.from("product_variants").select("id").eq("product_id", productId);
+        q = v.color_id ? q.eq("color_id", v.color_id) : q.is("color_id", null);
+        q = v.size_id ? q.eq("size_id", v.size_id) : q.is("size_id", null);
+        const { data: ex } = await q.limit(1);
+        const res = (ex && ex.length)
+          ? await supabaseClient.from("product_variants").update(v).eq("id", ex[0].id)
+          : await supabaseClient.from("product_variants").insert(v);
+        if (res.error) failed.push(`${v.sku}: ${res.error.message}`);
+      }
+
+      // حذف الصفوف القديمة التالفة اللي اتسجلت من غير مقاس (كانت بتظهر "-")
+      if (variantsToInsert.every(v => v.size_id)) {
+        const { error: cleanErr } = await supabaseClient.from("product_variants")
+          .delete().eq("product_id", productId).is("size_id", null);
+        if (cleanErr) console.warn("تعذر حذف الصفوف القديمة بدون مقاس:", cleanErr.message);
+      }
+
+      if (failed.length) alert("بعض المتغيرات لم تُحفظ:\n" + failed.join("\n"));
       await supabaseClient.from("products").update({ stock_quantity: totalStockFromVariants }).eq("id", productId);
     }
 
@@ -857,6 +896,33 @@ window.editProduct = async function(productId) {
     renderImagesPreview();
   }
 
+  // تحميل الألوان والمقاسات والمخزون الحالي للمنتج داخل الفورم (عشان التعديل مايعملش صفوف مكررة)
+  const variants = product.product_variants || [];
+  variants.forEach(v => {
+    const cName = v.product_colors?.name;
+    const sName = getVariantSizeName(v);
+    if (cName && !currentProductColors.some(c => c.name === cName)) {
+      currentProductColors.push({ name: cName, hex_code: v.product_colors.hex_code || "#000000" });
+    }
+    if (sName && !currentProductSizes.some(s => s.name === sName)) {
+      currentProductSizes.push({ name: sName });
+    }
+  });
+  renderColorsTags();
+  renderSizesTags();
+  generateVariantMatrix();
+  document.querySelectorAll(".matrix-row").forEach(row => {
+    const col = currentProductColors[row.getAttribute("data-color-idx")]?.name;
+    const siz = currentProductSizes[row.getAttribute("data-size-idx")]?.name;
+    const v = variants.find(x => x.product_colors?.name === col && getVariantSizeName(x) === siz);
+    if (!v) return;
+    if (v.sku) row.querySelector(".m-sku").value = v.sku;
+    row.querySelector(".m-price").value = v.price ?? 0;
+    row.querySelector(".m-cost").value = v.cost_price ?? 0;
+    row.querySelector(".m-stock").value = v.stock_quantity ?? 0;
+    row.querySelector(".m-active").checked = v.is_active !== false;
+  });
+
   const addNav = document.getElementById("navAddProduct");
   if (addNav) addNav.click();
 };
@@ -906,7 +972,7 @@ async function loadProductsWithVariants() {
       .select(`
         *,
         product_images(image_url, is_cover, sort_order),
-        product_variants(id, sku, price, cost_price, stock_quantity, is_active, product_colors(name, hex_code), product_sizes(name))
+        product_variants(id, sku, price, cost_price, stock_quantity, is_active, color_id, size_id, product_colors(name, hex_code), product_sizes(name))
       `)
       .order("created_at", { ascending: false });
 
@@ -968,7 +1034,7 @@ function renderProductsTable(products) {
         return `
           <span class="variant-pill">
             ${v.product_colors ? `<span class="color-dot" style="background:${v.product_colors.hex_code};"></span>` : ''}
-            ${v.product_sizes ? v.product_sizes.name : ''} 
+            ${getVariantSizeName(v)} 
             <strong>(${v.stock_quantity})</strong>
           </span>
         `;
@@ -1034,7 +1100,7 @@ function renderInventoryTable(variants) {
         <td>
           ${v.product_colors ? `<span class="color-dot" style="background:${v.product_colors.hex_code};"></span> ${v.product_colors.name}` : '-'}
         </td>
-        <td><strong>${v.product_sizes ? v.product_sizes.name : '-'}</strong></td>
+        <td><strong>${getVariantSizeName(v) || '-'}</strong></td>
         <td><code>${v.sku || '-'}</code></td>
         <td>${Number(v.price || 0).toLocaleString("ar-EG")} ج.م</td>
         <td>${Number(v.cost_price || 0).toLocaleString("ar-EG")} ج.م</td>
@@ -1494,4 +1560,18 @@ function translateStatus(st) {
     returned: "مرتجع"
   };
   return map[st] || st;
+}
+
+// ==================================================
+// استخراج اسم المقاس للمتغير (من جدول المقاسات، أو من الـ SKU كحل احتياطي)
+// ==================================================
+function getVariantSizeName(v) {
+  if (!v) return "";
+  if (v.product_sizes && v.product_sizes.name) return v.product_sizes.name;
+  // الـ SKU بيتولد بالشكل: BASE-COL-SIZE
+  if (v.sku && v.sku.includes("-")) {
+    const last = v.sku.split("-").pop().trim().toUpperCase();
+    if (/^(XXS|XS|S|M|L|XL|XXL|XXXL|\dXL|\d{1,3})$/.test(last)) return last;
+  }
+  return "";
 }

@@ -1,4 +1,5 @@
 
+
 // ==================================================
 // إعداد الاتصال المباشر بـ Supabase
 // ==================================================
@@ -132,6 +133,7 @@ async function loadAllDashboardData() {
     loadOrders(),
     loadProductsWithVariants(),
     loadDiscounts(),
+    loadPromoSettings(),
     loadCustomers()
   ]);
   calculateKPIsAndCharts();
@@ -705,34 +707,57 @@ window.handleProductFormSubmit = async function(e) {
       productId = newProd.id;
     }
 
+    // ===== مزامنة صور المنتج (حذف الصور المحذوفة من Storage + الجدول) =====
+    const extractStoragePath = (url) => {
+      if (!url) return null;
+      const marker = '/product-images/';
+      const idx = url.indexOf(marker);
+      if (idx === -1) return null;
+      return decodeURIComponent(url.substring(idx + marker.length).split('?')[0]);
+    };
+
+    if (editId) {
+      const { data: oldImgs } = await supabaseClient
+        .from("product_images").select("image_url").eq("product_id", productId);
+      const keptUrls = currentUploadedImages.filter(im => im.existing_url).map(im => im.existing_url);
+      const removedPaths = (oldImgs || [])
+        .filter(o => !keptUrls.includes(o.image_url))
+        .map(o => extractStoragePath(o.image_url))
+        .filter(Boolean);
+      if (removedPaths.length) {
+        const { error: rmErr } = await supabaseClient.storage.from("product-images").remove(removedPaths);
+        if (rmErr) console.error("تعذر حذف الصور من Storage:", rmErr);
+      }
+      const { error: delImgErr } = await supabaseClient.from("product_images").delete().eq("product_id", productId);
+      if (delImgErr) throw new Error("تعذر حذف الصور القديمة: " + delImgErr.message);
+    }
+
     for (let i = 0; i < currentUploadedImages.length; i++) {
       const img = currentUploadedImages[i];
+      let finalUrl = img.existing_url || null;
+
       if (img.file) {
         const fileExt = img.file.name.split('.').pop();
         const fileName = `${productId}/${Date.now()}-${i}.${fileExt}`;
-        
         const { data: uploadData, error: uploadErr } = await supabaseClient
-          .storage
-          .from("product-images")
-          .upload(fileName, img.file, { upsert: true });
+          .storage.from("product-images").upload(fileName, img.file, { upsert: true });
 
         if (uploadErr) {
           console.error("خطأ في رفع الصورة إلى Storage:", uploadErr);
           alert("تنبيه: فشل رفع الصورة إلى Supabase Storage. يرجى التأكد من إنشاء Bucket باسم 'product-images' وتفعيله كـ Public في Supabase.");
         } else if (uploadData) {
           const { data: pubUrlData } = supabaseClient.storage.from("product-images").getPublicUrl(fileName);
-          let fullUrl = pubUrlData.publicUrl;
-          if (fullUrl && fullUrl.includes('/storage/v1/object/product-images/') && !fullUrl.includes('/storage/v1/object/public/')) {
-            fullUrl = fullUrl.replace('/storage/v1/object/product-images/', '/storage/v1/object/public/product-images/');
-          }
-
-          await supabaseClient.from("product_images").insert({
-            product_id: productId,
-            image_url: fullUrl,
-            is_cover: img.is_cover,
-            sort_order: i
-          });
+          finalUrl = formatImageUrl(pubUrlData.publicUrl);
         }
+      }
+
+      if (finalUrl) {
+        await supabaseClient.from("product_images").insert({
+          product_id: productId,
+          image_url: finalUrl,
+          is_cover: !!img.is_cover,
+          sort_order: i
+        });
       }
     }
 
@@ -946,6 +971,12 @@ window.deleteProduct = async function(productId, productName) {
       alert("المنتج مرتبط بطلبات سابقة، تم إيقاف تنشيطه (is_active = false) للحفاظ على سجلات الطلبات.");
     } else {
       await supabaseClient.from("product_variants").delete().eq("product_id", productId);
+      const { data: delImgs } = await supabaseClient.from("product_images").select("image_url").eq("product_id", productId);
+      const delPaths = (delImgs || []).map(o => {
+        const i = (o.image_url || '').indexOf('/product-images/');
+        return i === -1 ? null : decodeURIComponent(o.image_url.substring(i + 16).split('?')[0]);
+      }).filter(Boolean);
+      if (delPaths.length) await supabaseClient.storage.from("product-images").remove(delPaths);
       await supabaseClient.from("product_images").delete().eq("product_id", productId);
       await supabaseClient.from("product_colors").delete().eq("product_id", productId);
       await supabaseClient.from("product_sizes").delete().eq("product_id", productId);
@@ -1575,3 +1606,63 @@ function getVariantSizeName(v) {
   }
   return "";
 }
+
+
+// ==================================================
+// إعدادات خصم البانر الأخضر (عرض الكمية) - جدول store_settings
+// ==================================================
+window.updatePromoDiscountType = function() {
+  const fixed = document.getElementById("promo_discount_type").value === "fixed";
+  const input = document.getElementById("promo_discount_value");
+  document.getElementById("promo_discount_value_label").textContent = fixed ? "قيمة الخصم (ج.م)" : "نسبة الخصم %";
+  if (fixed) input.removeAttribute("max");
+  else input.setAttribute("max", "100");
+};
+
+async function loadPromoSettings() {
+  const { data, error } = await supabaseClient
+    .from("store_settings").select("value").eq("key", "promo_banner").maybeSingle();
+  if (error) { console.error("store_settings:", error); return; }
+  const v = (data && data.value) || {};
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val; };
+  const en = document.getElementById("promo_enabled");
+  if (en) en.checked = v.enabled !== false;
+  set("promo_min_qty", v.min_qty ?? 2);
+  set("promo_discount_type", v.discount_type === "fixed" ? "fixed" : "percentage");
+  set("promo_discount_value", v.discount_value ?? v.percent ?? 10);
+  window.updatePromoDiscountType();
+  set("promo_text_ar", v.text_ar ?? "اشتري قطعتين وخد خصم 10٪");
+  set("promo_text_en", v.text_en ?? "Buy 2 items and get 10% off");
+}
+
+window.savePromoSettings = async function(e) {
+  if (e) e.preventDefault();
+  const btn = document.getElementById("savePromoBtn");
+  const discountType = document.getElementById("promo_discount_type").value === "fixed" ? "fixed" : "percentage";
+  const discountValue = Number(document.getElementById("promo_discount_value").value);
+  const minQty = Number(document.getElementById("promo_min_qty").value);
+  if (!Number.isFinite(discountValue) || discountValue < 0 || (discountType === "percentage" && discountValue > 100)) {
+    return alert("أدخل خصماً صحيحاً: النسبة من 0 إلى 100، والمبلغ لا يقل عن صفر.");
+  }
+  if (!Number.isInteger(minQty) || minQty < 1) return alert("أقل عدد قطع لازم يكون عدداً صحيحاً لا يقل عن 1.");
+  const value = {
+    enabled: document.getElementById("promo_enabled").checked,
+    min_qty: minQty,
+    discount_type: discountType,
+    discount_value: discountValue,
+    percent: discountType === "percentage" ? discountValue : 0,
+    text_ar: document.getElementById("promo_text_ar").value.trim(),
+    text_en: document.getElementById("promo_text_en").value.trim()
+  };
+  btn.disabled = true;
+  try {
+    const { error } = await supabaseClient.from("store_settings")
+      .upsert({ key: "promo_banner", value, updated_at: new Date().toISOString() }, { onConflict: "key" });
+    if (error) return alert("تعذر حفظ إعدادات البانر: " + error.message);
+    alert("تم حفظ خصم البانر بنجاح. سيظهر بالموقع عند تحديث الصفحة.");
+  } catch (error) {
+    alert("تعذر حفظ إعدادات البانر: " + error.message);
+  } finally {
+    btn.disabled = false;
+  }
+};

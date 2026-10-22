@@ -3,8 +3,8 @@
 // ==================================================
 // إعداد الاتصال المباشر بـ Supabase
 // ==================================================
-const SUPABASE_URL = "https://lpunsnvraeylwuugjmwl.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_vcPbI8K3XNmrLn99ZIT16w_p5K36USH";
+const SUPABASE_URL = "https://fhgkfnidnotabwvsmlcd.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_MTAudVvpxTb7g7Gxz85EJw_mDcw4RJY";
 
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 
@@ -109,6 +109,12 @@ function setupUIEvents() {
   if (orderFilter) {
     orderFilter.addEventListener("change", () => filterOrdersTable(orderFilter.value));
   }
+
+  const orderSearchInput = document.getElementById("orderSearchInput");
+  if (orderSearchInput) {
+    orderSearchInput.addEventListener("input", (e) => filterOrdersTable(currentOrderStatusFilter, e.target.value));
+  }
+
 
   const stockFilter = document.getElementById("inventoryStockFilter");
   if (stockFilter) {
@@ -237,12 +243,52 @@ function renderOrdersTable(orders) {
   `).join("");
 }
 
-function filterOrdersTable(status) {
-  if (status === "all") {
-    renderOrdersTable(allOrdersCache);
-  } else {
-    renderOrdersTable(allOrdersCache.filter(o => o.status === status));
+// حالة الفلترة الحالية لجدول الطلبات (حالة الطلب + نص البحث)
+let currentOrderStatusFilter = "all";
+let currentOrderSearchTerm = "";
+
+function applyOrderFilters() {
+  let list = allOrdersCache;
+
+  // فلتر الحالة
+  if (currentOrderStatusFilter !== "all") {
+    list = list.filter(o => o.status === currentOrderStatusFilter);
   }
+
+  // بحث نصي: اسم العميل، الهاتف، رقم الطلب، البريد، العنوان، أو اسم المنتج/SKU داخل بنود الطلب
+  const term = currentOrderSearchTerm.toLowerCase().trim();
+  if (term) {
+    const digits = term.replace(/\D/g, "");
+    list = list.filter(o => {
+      let matched = [
+        o.customer_name, o.customer_phone, o.customer_email,
+        o.governorate, o.city, o.area, o.address_line,
+        "#" + o.id, o.id
+      ].filter(Boolean).join(" ").toLowerCase().includes(term);
+
+      // مطابقة رقم الهاتف بعد إزالة الرموز (مثلاً البحث بدون +20)
+      if (!matched && digits) {
+        matched = (o.customer_phone || "").replace(/\D/g, "").includes(digits);
+      }
+
+      // البحث داخل بنود الطلب (اسم المنتج أو SKU)
+      if (!matched && (o.items || []).length) {
+        matched = o.items.some(it =>
+          `${it.product_name || ""} ${it.sku || ""}`.toLowerCase().includes(term)
+        );
+      }
+
+      return matched;
+    });
+  }
+
+  renderOrdersTable(list);
+}
+
+function filterOrdersTable(status, term) {
+  if (typeof status === "string") currentOrderStatusFilter = status;
+  if (typeof term === "string") currentOrderSearchTerm = term;
+  applyOrderFilters();
 }
 
 function renderLatestOrders(orders) {
